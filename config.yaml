@@ -1,13 +1,13 @@
 # Database configuration
 database:
-  host: ""
-  port: 5432
-  name: ""
-  user: ""
-  password: ""
+  host: null
+  port: null
+  name: null
+  user: null
+  password: null
 
 # API configuration
 api:
-  host: ""
+  host: "150.145.51.193"
   port: 8080
   image_view: "images"
