@@ -1,0 +1,13 @@
+# Database configuration
+database:
+  host: ""
+  port: 5432
+  name: ""
+  user: ""
+  password: ""
+
+# API configuration
+api:
+  host: ""
+  port: 8080
+  image_view: "images"

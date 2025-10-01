@@ -1,6 +1,9 @@
 data/
 outputs/
 
+# secrets
+.env
+
 
 # Python-generated files
 __pycache__/
