@@ -14,19 +14,19 @@ class ConfigManager:
 
     _instance: Optional["ConfigManager"] = field(default=None, init=False, repr=False)
     _config: DictConfig | None = field(default=None, init=False, repr=False)
-    config_path: Path = field(default=CONFIG_PATH)
+    config_path: str | Path = field(default=CONFIG_PATH)
 
     def __repr__(self) -> str:
         return f"ConfigManager(config_path={self.config_path}, config={self.config})"
 
-    def __new__(cls, config_path: Path = CONFIG_PATH):
+    def __new__(cls, config_path: str | Path = CONFIG_PATH):
         """Create a singleton instance of ConfigManager."""
         if cls._instance is None:
             # If no instance exists, create one
             cls._instance = super().__new__(cls)
 
             # Set the config_path only on first creation
-            cls._instance.config_path = config_path
+            cls._instance.config_path = Path(config_path)
 
         # Return the singleton instance
         return cls._instance
@@ -35,9 +35,9 @@ class ConfigManager:
         if self._config is None:
             self._config = self._load_config(self.config_path)
 
-    def _load_config(self, config_path: Path) -> DictConfig:
+    def _load_config(self, config_path: str | Path) -> DictConfig:
         """Load configuration from YAML file with environment variable overrides."""
-        if not config_path.exists():
+        if not Path(config_path).exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
         config = OmegaConf.load(config_path)
 
