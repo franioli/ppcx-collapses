@@ -1,6 +1,7 @@
 import io
 import logging
 from datetime import datetime
+from typing import Literal, overload
 
 import pandas as pd
 import requests
@@ -71,41 +72,55 @@ def fetch_dic_analysis_ids(
 ) -> list[int]:
     """
     Search for DIC analysis IDs in the database with flexible filtering options.
+    Uses direct SQL execution via SQLAlchemy connection and returns list[int].
 
-    This function allows you to retrieve DIC analysis IDs using a wide range of filters:
-    - By exact reference date, or within a date interval
-    - By master/slave image timestamps (exact or interval)
-    - By camera (ID or name)
-    - By time difference between images (exact, min, max)
-    - By month (on reference_date)
-
-    Parameters:
-        db_engine: SQLAlchemy database engine
-        reference_date: Exact reference date (YYYY-MM-DD or datetime)
-        reference_date_start: Start of reference date interval
-        reference_date_end: End of reference date interval
-        master_timestamp: Exact master image timestamp
-        master_timestamp_start: Start of master timestamp interval
-        master_timestamp_end: End of master timestamp interval
-        slave_timestamp: Exact slave image timestamp
-        slave_timestamp_start: Start of slave timestamp interval
-        slave_timestamp_end: End of slave timestamp interval
-        camera_id: Camera ID
-        camera_name: Camera name
-        dt_hours: Exact time difference between images (hours)
-        dt_hours_min: Minimum time difference (hours)
-        dt_hours_max: Maximum time difference (hours)
-        month: Month (integer, 1-12) for reference_date
-
-    Returns:
-        List of DIC analysis IDs matching the specified filters.
-
-    Example usage:
-        fetch_dic_analysis_ids(db_engine, reference_date="2024-08-23", camera_name="PPCX_Tele")
-        fetch_dic_analysis_ids(db_engine, master_timestamp_start="2024-08-01", master_timestamp_end="2024-08-31")
-        fetch_dic_analysis_ids(db_engine, dt_hours_min=1, dt_hours_max=24)
-        fetch_dic_analysis_ids(db_engine, month=8)
+    See docstring in original implementation for detailed parameter description.
     """
+
+    def _sql_literal(val):
+        """Return a safe SQL literal for simple types (int, float, datetime/date, str)."""
+        if isinstance(val, (int, float)):
+            return str(val)
+        if isinstance(val, datetime):
+            return f"'{val.isoformat()}'"
+        s = str(val)
+        # escape single quotes for SQL
+        s = s.replace("'", "''")
+        return f"'{s}'"
+
+    # Keep a dict of provided criteria for logging
+    criteria: dict[str, object] = {}
+    if reference_date is not None:
+        criteria["reference_date"] = reference_date
+    if reference_date_start is not None:
+        criteria["reference_date_start"] = reference_date_start
+    if reference_date_end is not None:
+        criteria["reference_date_end"] = reference_date_end
+    if master_timestamp is not None:
+        criteria["master_timestamp"] = master_timestamp
+    if master_timestamp_start is not None:
+        criteria["master_timestamp_start"] = master_timestamp_start
+    if master_timestamp_end is not None:
+        criteria["master_timestamp_end"] = master_timestamp_end
+    if slave_timestamp is not None:
+        criteria["slave_timestamp"] = slave_timestamp
+    if slave_timestamp_start is not None:
+        criteria["slave_timestamp_start"] = slave_timestamp_start
+    if slave_timestamp_end is not None:
+        criteria["slave_timestamp_end"] = slave_timestamp_end
+    if camera_id is not None:
+        criteria["camera_id"] = camera_id
+    if camera_name is not None:
+        criteria["camera_name"] = camera_name
+    if dt_hours is not None:
+        criteria["dt_hours"] = dt_hours
+    if dt_hours_min is not None:
+        criteria["dt_hours_min"] = dt_hours_min
+    if dt_hours_max is not None:
+        criteria["dt_hours_max"] = dt_hours_max
+    if month is not None:
+        criteria["month"] = month
+
     query = """
     SELECT 
         DIC.id as dic_id
@@ -114,78 +129,67 @@ def fetch_dic_analysis_ids(
     JOIN ppcx_app_camera CAM ON IMG.camera_id = CAM.id
     WHERE 1=1
     """
-    params = []
 
-    # Exact date
+    # Append filters (use safe literals)
     if reference_date is not None:
-        query += " AND DATE(DIC.reference_date) = %s"
-        params.append(str(reference_date))
-    # Date interval
+        query += f" AND DATE(DIC.reference_date) = {_sql_literal(reference_date)}"
     if reference_date_start is not None:
-        query += " AND DATE(DIC.reference_date) >= %s"
-        params.append(str(reference_date_start))
+        query += (
+            f" AND DATE(DIC.reference_date) >= {_sql_literal(reference_date_start)}"
+        )
     if reference_date_end is not None:
-        query += " AND DATE(DIC.reference_date) <= %s"
-        params.append(str(reference_date_end))
+        query += f" AND DATE(DIC.reference_date) <= {_sql_literal(reference_date_end)}"
 
-    # Exact master timestamp
     if master_timestamp is not None:
-        query += " AND DIC.master_timestamp = %s"
-        params.append(str(master_timestamp))
-    # Master timestamp interval
+        query += f" AND DIC.master_timestamp = {_sql_literal(master_timestamp)}"
     if master_timestamp_start is not None:
-        query += " AND DIC.master_timestamp >= %s"
-        params.append(str(master_timestamp_start))
+        query += f" AND DIC.master_timestamp >= {_sql_literal(master_timestamp_start)}"
     if master_timestamp_end is not None:
-        query += " AND DIC.master_timestamp <= %s"
-        params.append(str(master_timestamp_end))
+        query += f" AND DIC.master_timestamp <= {_sql_literal(master_timestamp_end)}"
 
-    # Slave timestamp
     if slave_timestamp is not None:
-        query += " AND DIC.slave_timestamp = %s"
-        params.append(str(slave_timestamp))
+        query += f" AND DIC.slave_timestamp = {_sql_literal(slave_timestamp)}"
     if slave_timestamp_start is not None:
-        query += " AND DIC.slave_timestamp >= %s"
-        params.append(str(slave_timestamp_start))
+        query += f" AND DIC.slave_timestamp >= {_sql_literal(slave_timestamp_start)}"
     if slave_timestamp_end is not None:
-        query += " AND DIC.slave_timestamp <= %s"
-        params.append(str(slave_timestamp_end))
+        query += f" AND DIC.slave_timestamp <= {_sql_literal(slave_timestamp_end)}"
 
-    # Camera filters
     if camera_id is not None:
-        query += " AND CAM.id = %s"
-        params.append(camera_id)
+        query += f" AND CAM.id = {_sql_literal(camera_id)}"
     if camera_name is not None:
-        query += " AND CAM.camera_name = %s"
-        params.append(camera_name)
+        query += f" AND CAM.camera_name = {_sql_literal(camera_name)}"
 
-    # Time difference (dt) filters
     if dt_hours is not None:
-        query += " AND DIC.dt_hours = %s"
-        params.append(dt_hours)
+        query += f" AND DIC.dt_hours = {_sql_literal(dt_hours)}"
     if dt_hours_min is not None:
-        query += " AND DIC.dt_hours >= %s"
-        params.append(dt_hours_min)
+        query += f" AND DIC.dt_hours >= {_sql_literal(dt_hours_min)}"
     if dt_hours_max is not None:
-        query += " AND DIC.dt_hours <= %s"
-        params.append(dt_hours_max)
+        query += f" AND DIC.dt_hours <= {_sql_literal(dt_hours_max)}"
 
-    # Month filter (on reference_date)
     if month is not None:
-        query += " AND EXTRACT(MONTH FROM DIC.reference_date) = %s"
-        params.append(month)
+        query += f" AND EXTRACT(MONTH FROM DIC.reference_date) = {_sql_literal(month)}"
 
     query += " ORDER BY DIC.master_timestamp"
 
-    # Read only the dic_id column for efficiency
-    df = pd.read_sql(query, db_engine, params=tuple(params), columns=["dic_id"])
-    if df.empty:
-        logger.warning("No DIC analyses found for the given criteria")
+    try:
+        with db_engine.connect() as conn:
+            result = conn.execute(text(query))
+            rows = result.fetchall()
+    except Exception as exc:
+        logger.exception(
+            f"Database query for fetch_dic_analysis_ids failed. Criteria: {criteria}. Error: {exc}",
+        )
         return []
-    logger.info(f"Found {len(df)} DIC analyses matching criteria")
 
-    # Always return a list of ints
-    return df["dic_id"].astype(int).tolist()
+    if not rows:
+        logger.info(
+            f"No DIC analyses found for the given criteria. Criteria: {criteria}"
+        )
+        return []
+
+    dic_ids = [int(row[0]) for row in rows]
+    logger.debug(f"Found {len(dic_ids)} DIC analyses matching criteria: {criteria}")
+    return dic_ids
 
 
 def get_dic_analysis_by_ids(
@@ -273,6 +277,28 @@ def get_dic_data(
     df["V"] = magnitudes
 
     return df
+
+
+@overload
+def get_multi_dic_data(
+    dic_ids: list[int],
+    *,
+    stack_results: Literal[False],
+    app_host: str | None = None,
+    app_port: str | None = None,
+    config: ConfigManager | None = None,
+) -> dict[int, pd.DataFrame]: ...
+
+
+@overload
+def get_multi_dic_data(
+    dic_ids: list[int],
+    *,
+    stack_results: Literal[True],
+    app_host: str | None = None,
+    app_port: str | None = None,
+    config: ConfigManager | None = None,
+) -> pd.DataFrame: ...
 
 
 def get_multi_dic_data(
@@ -433,3 +459,39 @@ def get_image(
         return img
     else:
         raise ValueError(f"Image with ID {image_id} not found.")
+
+
+# === Collapse Data ===
+
+
+def get_collapses_df(db_engine) -> pd.DataFrame:
+    """Read all collapse records from DB and return dataframe with parsed dates."""
+    query = """
+        SELECT c.id, img.acquisition_timestamp::date AS date,
+               c.image_id, ST_AsText(c.geom) AS geom_wkt,
+               c.area, c.volume
+        FROM ppcx_app_collapse c
+        JOIN ppcx_app_image img ON c.image_id = img.id
+        ORDER BY img.acquisition_timestamp DESC, c.id ASC
+    """
+    df = pd.read_sql(query, db_engine, parse_dates=["date"])
+    df["date"] = pd.to_datetime(df["date"])
+    return df
+
+
+def get_collapses_by_date(engine, date: str, limit: int | None = None) -> pd.DataFrame:
+    """Return collapse rows. If date provided, filter by image acquisition date (date string YYYY-MM-DD)."""
+    query = """
+        SELECT c.id, img.acquisition_timestamp::date AS date,
+            c.image_id, ST_AsText(c.geom) AS geom_wkt,
+            c.area, c.volume
+        FROM ppcx_app_collapse c
+        JOIN ppcx_app_image img ON c.image_id = img.id
+        WHERE img.acquisition_timestamp::date = %s
+        ORDER BY img.acquisition_timestamp DESC, c.id ASC
+    """
+    if limit is not None:
+        query += f" LIMIT {limit}"
+
+    df = pd.read_sql(query, engine, params=(date,))
+    return df
