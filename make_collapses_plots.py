@@ -249,9 +249,6 @@ def process_collapse(
         )
         return None
 
-    out_path = out_dir / f"collapse_{collapse_id}_timeseries_placeholder.txt"
-    return out_path
-
 
 def main() -> bool:
     cfg = ConfigManager(CONFIG_PATH)
