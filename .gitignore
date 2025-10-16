@@ -3,6 +3,8 @@ outputs/
 output/
 # secrets
 .env
+*sandbox*
+.vscode/
 
 
 # Python-generated files
